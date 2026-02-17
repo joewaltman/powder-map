@@ -1,4 +1,4 @@
-import { SNOTEL_URL, WIND_URL, SNOW_LIQUID_RATIO } from './config.js';
+import { SNOTEL_URL, WIND_URL, SNOW_LIQUID_RATIO, RESORT_API_URL } from './config.js';
 
 // ── SNOTEL (snowfall / precipitation) ───────────────────────────────
 
@@ -82,6 +82,36 @@ function parseSnotelCsv(text) {
   }
 
   return rows;
+}
+
+// ── Resort API (staff-reported snow) ─────────────────────────────────
+
+/**
+ * Fetch the resort-reported snow data from Powder Mountain's API.
+ * Returns { snow24h, snow48h, baseDepth, seasonTotal } in inches, or null on failure.
+ */
+export async function fetchResortSnow() {
+  const res = await fetch(RESORT_API_URL);
+  if (!res.ok) throw new Error(`Resort API returned ${res.status}`);
+  const data = await res.json();
+  const snow = data.conditions.currentSnow;
+  return {
+    snow24h: snow.freshSnowFallDepth24H.countryValue,
+    snow48h: snow.freshSnowFallDepth48H.countryValue,
+    baseDepth: snow.snowTotalDepth.countryValue,
+    seasonTotal: snow.snowFallDepthCompleteSeason.countryValue,
+  };
+}
+
+/**
+ * Average SNOTEL-derived snowfall with resort-reported 24h snowfall.
+ * If one source is unavailable, use the other.
+ */
+export function averageSnowfall(snotelSnowfall, resortSnow24h) {
+  if (snotelSnowfall != null && resortSnow24h != null) {
+    return (snotelSnowfall + resortSnow24h) / 2;
+  }
+  return snotelSnowfall ?? resortSnow24h ?? 0;
 }
 
 // ── Open-Meteo (wind only) ──────────────────────────────────────────

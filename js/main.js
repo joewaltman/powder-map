@@ -1,5 +1,5 @@
-import { CENTER, BOUNDS, TERRAIN_ZOOM, MAP_ZOOM, MAP_STYLE, MAPBOX_TOKEN } from './config.js';
-import { fetchSnotelData, fetchWindData, computeDominantWind } from './weather.js';
+import { CENTER, BOUNDS, TERRAIN_ZOOM, MAP_ZOOM, MAP_STYLE, MAPBOX_TOKEN, LIFTS } from './config.js';
+import { fetchSnotelData, fetchWindData, computeDominantWind, averageSnowfall } from './weather.js';
 import { fetchTerrainGrid, getGridBounds } from './terrain.js';
 import { computePowderScores } from './powder.js';
 import { renderOverlay, addOverlayToMap } from './overlay.js';
@@ -25,14 +25,19 @@ function showWeatherError(msg) {
   err.classList.remove('hidden');
 }
 
-function updateWeatherPanel(snotel, wind) {
+function updateWeatherPanel(snowfall, snotel, resort, wind) {
   document.getElementById('weather-loading').classList.add('hidden');
   document.getElementById('weather-error').classList.add('hidden');
   const content = document.getElementById('weather-content');
   content.classList.remove('hidden');
 
-  document.getElementById('snowfall-value').textContent = formatInches(snotel.totalSnowfall);
-  document.getElementById('precip-value').textContent = formatInches(snotel.totalPrecip) + ' SWE';
+  document.getElementById('snowfall-value').textContent = formatInches(snowfall);
+
+  // Show both sources
+  const snotelStr = snotel ? formatInches(snotel.totalSnowfall) : '—';
+  const resortStr = resort ? formatInches(resort.snow24h) : '—';
+  document.getElementById('snow-sources-value').textContent =
+    `${snotelStr} / ${resortStr}`;
 
   if (wind) {
     document.getElementById('wind-value').textContent = `${wind.avgSpeed.toFixed(0)} mph`;
@@ -47,7 +52,52 @@ function updateWeatherPanel(snotel, wind) {
 
   const now = new Date();
   document.getElementById('last-updated').textContent =
-    `SNOTEL #1300 · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    `Updated ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+// ── Lift markers ────────────────────────────────────────────────────
+
+function addLiftMarkers(map, liftStatus) {
+  for (const lift of LIFTS) {
+    const el = document.createElement('div');
+    el.className = 'lift-marker';
+
+    // Check open/closed status from resort API
+    const status = liftStatus[lift.name];
+    if (status === 'OPEN') {
+      el.classList.add('lift-open');
+    } else if (status === 'CLOSED') {
+      el.classList.add('lift-closed');
+    }
+
+    const label = document.createElement('div');
+    label.className = 'lift-label';
+    label.textContent = lift.name;
+
+    const dot = document.createElement('div');
+    dot.className = 'lift-dot';
+
+    el.appendChild(dot);
+    el.appendChild(label);
+
+    new mapboxgl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([lift.lon, lift.lat])
+      .addTo(map);
+  }
+}
+
+function extractLiftStatus(resortData) {
+  const status = {};
+  if (!resortData) return status;
+  try {
+    const res = resortData._raw;
+    for (const sector of res.status.sectorsData) {
+      for (const lift of sector.lifts || []) {
+        status[lift.name] = lift.openingStatus;
+      }
+    }
+  } catch { /* ignore */ }
+  return status;
 }
 
 // ── Main ────────────────────────────────────────────────────────────
@@ -67,10 +117,24 @@ map.on('load', async () => {
   showStatus('Loading powder data…');
 
   try {
-    // Fetch SNOTEL snow data, Open-Meteo wind, and terrain in parallel
-    const [snotel, windData, terrain] = await Promise.all([
+    // Fetch all data sources in parallel
+    const [snotel, resortRaw, windData, terrain] = await Promise.all([
       fetchSnotelData().catch(err => {
         console.error('SNOTEL fetch failed:', err);
+        return null;
+      }),
+      fetch('https://powdermountain.com/api/conditions')
+        .then(r => r.json())
+        .then(data => {
+          const snow = data.conditions.currentSnow;
+          return {
+            snow24h: snow.freshSnowFallDepth24H.countryValue,
+            snow48h: snow.freshSnowFallDepth48H.countryValue,
+            baseDepth: snow.snowTotalDepth.countryValue,
+            _raw: data
+          };
+      }).catch(err => {
+        console.error('Resort API fetch failed:', err);
         return null;
       }),
       fetchWindData().catch(err => {
@@ -89,13 +153,23 @@ map.on('load', async () => {
       wind = computeDominantWind(windData.hourly);
     }
 
-    // Process SNOTEL snow data
-    if (!snotel) {
-      showWeatherError('SNOTEL data unavailable');
+    // Average SNOTEL + resort snowfall
+    const snotelSnowfall = snotel ? snotel.totalSnowfall : null;
+    const resortSnowfall = resortRaw ? resortRaw.snow24h : null;
+    const totalSnowfall = averageSnowfall(snotelSnowfall, resortSnowfall);
+    const totalPrecip = snotel ? snotel.totalPrecip : 0;
+
+    console.log(`Snow — SNOTEL: ${snotelSnowfall?.toFixed(1)}", Resort: ${resortSnowfall}", Avg: ${totalSnowfall.toFixed(1)}"`);
+
+    if (snotel || resortRaw) {
+      updateWeatherPanel(totalSnowfall, snotel, resortRaw, wind);
     } else {
-      updateWeatherPanel(snotel, wind);
-      console.log('SNOTEL:', snotel);
+      showWeatherError();
     }
+
+    // Add lift markers (with status if available)
+    const liftStatus = extractLiftStatus(resortRaw);
+    addLiftMarkers(map, liftStatus);
 
     // Can't render overlay without terrain
     if (!terrain) {
@@ -103,9 +177,6 @@ map.on('load', async () => {
       showStatus('Terrain data unavailable. Check your Mapbox token.');
       return;
     }
-
-    const totalSnowfall = snotel ? snotel.totalSnowfall : 0;
-    const totalPrecip = snotel ? snotel.totalPrecip : 0;
 
     // No meaningful snow → skip overlay
     if (totalSnowfall < 0.5) {

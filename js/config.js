@@ -37,5 +37,19 @@ export const WIND_URL =
   '&wind_speed_unit=mph&precipitation_unit=inch' +
   '&timezone=America%2FDenver';
 
+// Powder Mountain resort API — staff-reported snow numbers
+export const RESORT_API_URL = 'https://powdermountain.com/api/conditions';
+
+// Lift locations (base coordinates from OpenStreetMap)
+export const LIFTS = [
+  { name: 'Hidden Lake Express', lat: 41.3844, lon: -111.7601 },
+  { name: 'Sunrise',            lat: 41.3704, lon: -111.7573 },
+  { name: 'Sundown',            lat: 41.3766, lon: -111.7866 },
+  { name: 'Timberline',         lat: 41.3835, lon: -111.7768 },
+  { name: 'Saddle Horn',        lat: 41.3739, lon: -111.7706 },
+  { name: 'Paradise Express',   lat: 41.3988, lon: -111.7623 },
+  { name: 'Lightning Ridge',    lat: 41.3834, lon: -111.7768 },
+];
+
 // Overlay opacity on top of the map
 export const OVERLAY_OPACITY = 0.75;
