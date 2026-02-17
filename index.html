@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Powder Map – Powder Mountain</title>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="weather-panel">
+    <h2>Powder Mountain</h2>
+    <div id="weather-loading">Loading weather data…</div>
+    <div id="weather-content" class="hidden">
+      <div class="weather-row">
+        <span class="label">24h Snowfall</span>
+        <span id="snowfall-value" class="value">—</span>
+      </div>
+      <div class="weather-row">
+        <span class="label">24h Precip</span>
+        <span id="precip-value" class="value">—</span>
+      </div>
+      <div class="weather-row">
+        <span class="label">Wind</span>
+        <span id="wind-value" class="value">—</span>
+      </div>
+      <div class="weather-row">
+        <span class="label">Dominant Dir</span>
+        <span id="wind-dir-value" class="value">—</span>
+      </div>
+      <div class="weather-row">
+        <span class="label">Gusts</span>
+        <span id="gust-value" class="value">—</span>
+      </div>
+      <div id="last-updated" class="meta"></div>
+    </div>
+    <div id="weather-error" class="hidden error">Weather data unavailable</div>
+  </div>
+
+  <div id="legend">
+    <div class="legend-title">Powder Score</div>
+    <div class="legend-bar"></div>
+    <div class="legend-labels">
+      <span>Less snow</span>
+      <span>Best powder</span>
+    </div>
+  </div>
+
+  <div id="status-message" class="hidden"></div>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
+  <script src="env.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
