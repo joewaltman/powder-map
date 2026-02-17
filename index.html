@@ -12,10 +12,17 @@
 
   <div id="weather-panel">
     <h2>Powder Mountain</h2>
+
+    <div class="time-toggle">
+      <button class="time-btn" data-hours="12">12h</button>
+      <button class="time-btn active" data-hours="24">24h</button>
+      <button class="time-btn" data-hours="48">48h</button>
+    </div>
+
     <div id="weather-loading">Loading weather data…</div>
     <div id="weather-content" class="hidden">
       <div class="weather-row">
-        <span class="label">24h Snowfall</span>
+        <span id="snowfall-label" class="label">24h Snowfall</span>
         <span id="snowfall-value" class="value">—</span>
       </div>
       <div class="weather-row">

@@ -1,20 +1,22 @@
-import { SNOTEL_URL, WIND_URL, SNOW_LIQUID_RATIO, RESORT_API_URL } from './config.js';
+import { SNOTEL_BASE_URL, SNOTEL_ELEMENTS, WIND_BASE_URL, SNOW_LIQUID_RATIO, RESORT_API_URL } from './config.js';
 
 // ── SNOTEL (snowfall / precipitation) ───────────────────────────────
 
 /**
- * Fetch hourly SNOTEL data and derive snowfall from the precipitation
- * accumulation gauge and snow depth sensor.
- *
- * Returns { totalSnowfall, totalPrecip, sweChange, baseDepth, tempF }
- *   - totalSnowfall: estimated new snow in inches (SWE delta × SNOW_LIQUID_RATIO)
- *   - totalPrecip: liquid water equivalent of new precip in inches
- *   - sweChange: change in snow water equivalent in inches
- *   - baseDepth: latest snow depth reading in inches
- *   - tempF: latest observed temperature in °F
+ * Build SNOTEL URL for a given number of lookback hours.
  */
-export async function fetchSnotelData() {
-  const res = await fetch(SNOTEL_URL);
+function snotelUrl(hours) {
+  return `${SNOTEL_BASE_URL}-${hours},0/${SNOTEL_ELEMENTS}`;
+}
+
+/**
+ * Fetch hourly SNOTEL data for the given lookback period and derive snowfall.
+ *
+ * @param {number} hours - Lookback period (12, 24, or 48)
+ * Returns { totalSnowfall, totalPrecip, sweChange, baseDepth, tempF }
+ */
+export async function fetchSnotelData(hours = 24) {
+  const res = await fetch(snotelUrl(hours));
   if (!res.ok) throw new Error(`SNOTEL returned ${res.status}`);
   const text = await res.text();
 
@@ -52,7 +54,6 @@ export async function fetchSnotelData() {
 
 /**
  * Parse the SNOTEL Report Generator CSV into an array of row objects.
- * Skips comment lines (starting with #) and the header row.
  */
 function parseSnotelCsv(text) {
   const lines = text.split('\n');
@@ -63,7 +64,6 @@ function parseSnotelCsv(text) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
 
-    // First non-comment line is the header
     if (!headerSeen) {
       headerSeen = true;
       continue;
@@ -74,10 +74,10 @@ function parseSnotelCsv(text) {
 
     rows.push({
       date: cols[0].trim(),
-      snwd: parseFloat(cols[1]) || null,   // snow depth (inches)
-      prec: parseFloat(cols[2]) || null,    // precip accumulation (inches)
-      wteq: parseFloat(cols[3]) || null,    // snow water equivalent (inches)
-      tobs: parseFloat(cols[4]) || null     // observed temperature (°F)
+      snwd: parseFloat(cols[1]) || null,
+      prec: parseFloat(cols[2]) || null,
+      wteq: parseFloat(cols[3]) || null,
+      tobs: parseFloat(cols[4]) || null
     });
   }
 
@@ -87,8 +87,8 @@ function parseSnotelCsv(text) {
 // ── Resort API (staff-reported snow) ─────────────────────────────────
 
 /**
- * Fetch the resort-reported snow data from Powder Mountain's API.
- * Returns { snow24h, snow48h, baseDepth, seasonTotal } in inches, or null on failure.
+ * Fetch resort-reported snow data from Powder Mountain's API.
+ * Returns { snow12h, snow24h, snow48h, baseDepth } in inches.
  */
 export async function fetchResortSnow() {
   const res = await fetch(RESORT_API_URL);
@@ -96,42 +96,73 @@ export async function fetchResortSnow() {
   const data = await res.json();
   const snow = data.conditions.currentSnow;
   return {
+    snow12h: snow.freshSnowFallDepth12H.countryValue,
     snow24h: snow.freshSnowFallDepth24H.countryValue,
     snow48h: snow.freshSnowFallDepth48H.countryValue,
     baseDepth: snow.snowTotalDepth.countryValue,
-    seasonTotal: snow.snowFallDepthCompleteSeason.countryValue,
   };
 }
 
 /**
- * Average SNOTEL-derived snowfall with resort-reported 24h snowfall.
+ * Get resort snowfall for a specific period.
+ */
+export function getResortSnowForPeriod(resort, hours) {
+  if (!resort) return null;
+  if (hours <= 12) return resort.snow12h;
+  if (hours <= 24) return resort.snow24h;
+  return resort.snow48h;
+}
+
+/**
+ * Average SNOTEL-derived snowfall with resort-reported snowfall.
  * If one source is unavailable, use the other.
  */
-export function averageSnowfall(snotelSnowfall, resortSnow24h) {
-  if (snotelSnowfall != null && resortSnow24h != null) {
-    return (snotelSnowfall + resortSnow24h) / 2;
+export function averageSnowfall(snotelSnowfall, resortSnowfall) {
+  if (snotelSnowfall != null && resortSnowfall != null) {
+    return (snotelSnowfall + resortSnowfall) / 2;
   }
-  return snotelSnowfall ?? resortSnow24h ?? 0;
+  return snotelSnowfall ?? resortSnowfall ?? 0;
 }
 
 // ── Open-Meteo (wind only) ──────────────────────────────────────────
 
 /**
- * Fetch wind data from Open-Meteo (last 24h hourly).
- * Returns the raw JSON response.
+ * Build Open-Meteo URL for a given lookback period.
  */
-export async function fetchWindData() {
-  const res = await fetch(WIND_URL);
+function windUrl(hours) {
+  const pastDays = hours <= 24 ? 1 : 2;
+  return `${WIND_BASE_URL}&past_days=${pastDays}`;
+}
+
+/**
+ * Fetch wind data from Open-Meteo for the given lookback period.
+ * Returns the raw JSON response, trimmed to the requested number of hours.
+ *
+ * @param {number} hours - Lookback period (12, 24, or 48)
+ */
+export async function fetchWindData(hours = 24) {
+  const res = await fetch(windUrl(hours));
   if (!res.ok) throw new Error(`Wind API returned ${res.status}`);
-  return res.json();
+  const data = await res.json();
+
+  // Open-Meteo returns full days; trim to the requested hours from the end
+  if (data.hourly && data.hourly.time) {
+    const total = data.hourly.time.length;
+    const keep = Math.min(hours, total);
+    const start = total - keep;
+    for (const key of Object.keys(data.hourly)) {
+      data.hourly[key] = data.hourly[key].slice(start);
+    }
+  }
+
+  return data;
 }
 
 /**
  * Compute the dominant wind direction over the period using vector averaging,
  * weighted by windSpeed * (1 + precip * 10) so snowy+windy hours count more.
  *
- * Returns { direction (degrees), avgSpeed (mph), maxGust (mph) } or null if
- * no valid wind data exists.
+ * Returns { direction (degrees), avgSpeed (mph), maxGust (mph) } or null.
  */
 export function computeDominantWind(hourly) {
   const speeds = hourly.wind_speed_10m;

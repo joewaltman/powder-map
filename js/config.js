@@ -17,39 +17,27 @@ export const MAP_STYLE = 'mapbox://styles/mapbox/outdoors-v12';
 // Mapbox access token — set in env.js (not committed) or replace here
 export const MAPBOX_TOKEN = window.MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
 
-// SNOTEL station on Powder Mountain (#1300) — hourly snow depth + precip
-// Returns CSV; no auth needed
-export const SNOTEL_URL =
+// SNOTEL base URL — hours parameter is appended dynamically
+export const SNOTEL_BASE_URL =
   'https://wcc.sc.egov.usda.gov/reportGenerator/view_csv/' +
-  'customSingleStationReport/hourly/1300:UT:SNTL/-24,0/' +
-  'SNWD::value,PREC::value,WTEQ::value,TOBS::value';
+  'customSingleStationReport/hourly/1300:UT:SNTL/';
+export const SNOTEL_ELEMENTS = 'SNWD::value,PREC::value,WTEQ::value,TOBS::value';
 
 // Snow-to-water ratio for estimating snowfall from liquid precip (SWE)
 // Utah cold powder typically 12:1–15:1; 12 is conservative
 export const SNOW_LIQUID_RATIO = 12;
 
-// Open-Meteo API — used only for wind direction/speed (SNOTEL wind is unreliable)
-export const WIND_URL =
+// Open-Meteo base URL — past_days is appended dynamically
+export const WIND_BASE_URL =
   'https://api.open-meteo.com/v1/forecast' +
   '?latitude=41.3797&longitude=-111.7808' +
   '&hourly=precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
-  '&past_days=1&forecast_days=0' +
+  '&forecast_days=0' +
   '&wind_speed_unit=mph&precipitation_unit=inch' +
   '&timezone=America%2FDenver';
 
 // Powder Mountain resort API — staff-reported snow numbers
 export const RESORT_API_URL = 'https://powdermountain.com/api/conditions';
-
-// Lift locations (base coordinates from OpenStreetMap)
-export const LIFTS = [
-  { name: 'Hidden Lake Express', lat: 41.3844, lon: -111.7601 },
-  { name: 'Sunrise',            lat: 41.3704, lon: -111.7573 },
-  { name: 'Sundown',            lat: 41.3766, lon: -111.7866 },
-  { name: 'Timberline',         lat: 41.3835, lon: -111.7768 },
-  { name: 'Saddle Horn',        lat: 41.3739, lon: -111.7706 },
-  { name: 'Paradise Express',   lat: 41.3988, lon: -111.7623 },
-  { name: 'Lightning Ridge',    lat: 41.3834, lon: -111.7768 },
-];
 
 // Overlay opacity on top of the map
 export const OVERLAY_OPACITY = 0.75;
